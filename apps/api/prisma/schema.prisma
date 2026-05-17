@@ -1,0 +1,126 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  username     String   @unique
+  email        String   @unique
+  passwordHash String
+  role         String   @default("rep") // admin, manager, rep
+  name         String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  clients  Client[]
+  orders   Order[]
+  syncLogs SyncLog[]
+
+  @@map("users")
+}
+
+model Client {
+  id           String   @id @default(uuid())
+  name         String
+  phone        String?
+  email        String?
+  address      String?
+  businessType String? // retail, wholesale, restaurant, other
+  assignedTo   String?
+  user         User?    @relation(fields: [assignedTo], references: [id], onDelete: SetNull)
+  creditLimit  Decimal? @db.Decimal(10, 2)
+  notes        String?
+  version      Int      @default(1)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  deleted      Boolean  @default(false)
+
+  orders Order[]
+
+  @@index([assignedTo])
+  @@index([deleted])
+  @@map("clients")
+}
+
+model Product {
+  id            String   @id @default(uuid())
+  name          String
+  sku           String   @unique
+  unitPrice     Decimal  @db.Decimal(10, 2)
+  stockQuantity Int      @default(0)
+  reorderLevel  Int      @default(10)
+  category      String?
+  version       Int      @default(1)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  orderItems OrderItem[]
+
+  @@index([category])
+  @@map("products")
+}
+
+model Order {
+  id            String   @id @default(uuid())
+  clientId      String
+  client        Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  subtotal      Decimal  @db.Decimal(10, 2)
+  tax           Decimal  @default(0) @db.Decimal(10, 2)
+  discount      Decimal  @default(0) @db.Decimal(10, 2)
+  total         Decimal  @db.Decimal(10, 2)
+  status        String   @default("draft") // draft, submitted, processing, shipped, cancelled
+  paymentMethod String? // cash, credit, transfer
+  notes         String?
+  createdBy     String
+  user          User     @relation(fields: [createdBy], references: [id])
+  version       Int      @default(1)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  items OrderItem[]
+
+  @@index([clientId])
+  @@index([createdBy])
+  @@index([status])
+  @@map("orders")
+}
+
+model OrderItem {
+  id          String  @id @default(uuid())
+  orderId     String
+  order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product @relation(fields: [productId], references: [id])
+  productName String
+  unitPrice   Decimal @db.Decimal(10, 2)
+  quantity    Int
+  total       Decimal @db.Decimal(10, 2)
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+model SyncLog {
+  id               String   @id @default(uuid())
+  userId           String?
+  user             User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  tableName        String
+  recordId         String
+  operation        String // CREATE, UPDATE, DELETE
+  timestamp        DateTime @default(now())
+  payload          Json?
+  conflictResolved Boolean  @default(false)
+  conflictStrategy String?
+
+  @@index([userId])
+  @@index([timestamp])
+  @@map("sync_logs")
+}
